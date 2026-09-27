@@ -7,7 +7,7 @@ Spring Boot 3.x, Spring Security, JPA(H2)로 만든 학습용 게시판 API입�
 - JDK 21
 - 별도 DB 설치는 필요 없습니다. 개발 프로필은 프로젝트 루트에 H2 파일 DB를 자동 생성합니다.
 
-프로젝트 루트의 `.env`에서 JWT 서명 키를 읽습니다. `.env`는 Git에서 무시되므로 절대 커밋하지 않습니다. 최초에 `.env`가 없다면 아래 명령으로 키를 만듭니다.
+프로젝트 루트의 `.env`에서 JWT 서명 키를 읽습니다. 최초에 `.env`가 없다면 아래 명령으로 키를 만듭니다.
 
 ```bash
 openssl rand -base64 48 | sed 's/^/JWT_SECRET=/' > .env
@@ -204,4 +204,96 @@ curl -i -X PUT http://localhost:8080/api/v1/posts/1 \
 HTTP/1.1 403
 
 {"resultCode":"403-1","msg":"작성자만 수정하거나 삭제할 수 있습니다.","data":null}
+```
+
+## ToDo API 과제 명세
+
+> 아래는 회원·인증 없이 사용하는 ToDo 과제의 API 계약입니다. 구현도 이 계약과 같아야 하며, 할 일은 `id`, `title`, `completed`, `createdAt`을 반환합니다. `title`은 공백을 제외한 1~200자로 제한합니다.
+
+### ToDo API
+
+| 메서드 | 주소 | 요청 본문 | 성공 상태 | 성공 응답 |
+|---|---|---|---|---|
+| POST | `/api/v1/todos` | `{"title":"장보기"}` | 201 | 생성된 할 일 |
+| GET | `/api/v1/todos` | 없음 | 200 | 할 일 배열 |
+| GET | `/api/v1/todos/{id}` | 없음 | 200 | 할 일 하나 |
+| PATCH | `/api/v1/todos/{id}` | `{"title":"우유 사기","completed":true}` — 둘 중 하나만 보내도 됨 | 200 | 수정된 할 일 |
+| DELETE | `/api/v1/todos/{id}` | 없음 | 204 | 없음 |
+
+할 일 응답은 다음 모양입니다. 생성할 때 `completed`는 항상 `false`이고, `id`와 `createdAt`은 서버가 설정합니다.
+
+```json
+{
+  "id": 1,
+  "title": "장보기",
+  "completed": false,
+  "createdAt": "2026-09-27T16:00:00"
+}
+```
+
+오류는 상태와 관계없이 아래 형태로 통일합니다. `400-1`은 제목이 공백이거나 200자를 초과할 때, `404-1`은 존재하지 않는 할 일 ID일 때 사용합니다.
+
+```json
+{
+  "resultCode": "400-1",
+  "msg": "제목은 공백이 아닌 1~200자여야 합니다.",
+  "data": null
+}
+```
+
+주소는 할 일 컬렉션을 복수형 `/todos`로 표현하고, 한 건은 식별자를 경로 변수로 받습니다. 생성에는 `201 Created`, 조회·수정에는 `200 OK`, 본문이 필요 없는 삭제에는 `204 No Content`를 사용합니다. 로컬 실행에는 별도 설치가 필요 없는 H2 파일 DB를 선택합니다.
+
+### ToDo 호출 예시
+
+아래는 서버를 실행한 뒤 생성 → 목록 → 완료 처리 → 삭제 순서입니다.
+
+```bash
+curl -i -X POST http://localhost:8080/api/v1/todos \
+  -H 'Content-Type: application/json' \
+  -d '{"title":"장보기"}'
+```
+
+```http
+HTTP/1.1 201
+
+{"id":1,"title":"장보기","completed":false,"createdAt":"2026-09-27T16:00:00"}
+```
+
+```bash
+curl -i http://localhost:8080/api/v1/todos
+curl -i -X PATCH http://localhost:8080/api/v1/todos/1 \
+  -H 'Content-Type: application/json' \
+  -d '{"completed":true}'
+curl -i -X DELETE http://localhost:8080/api/v1/todos/1
+```
+
+```http
+HTTP/1.1 200
+
+[{"id":1,"title":"장보기","completed":false,"createdAt":"2026-09-27T16:00:00"}]
+
+HTTP/1.1 200
+
+{"id":1,"title":"장보기","completed":true,"createdAt":"2026-09-27T16:00:00"}
+
+HTTP/1.1 204
+```
+
+제목 검증 실패와 없는 ID 조회는 각각 다음과 같이 응답합니다.
+
+```bash
+curl -i -X POST http://localhost:8080/api/v1/todos \
+  -H 'Content-Type: application/json' \
+  -d '{"title":"   "}'
+curl -i http://localhost:8080/api/v1/todos/9999
+```
+
+```http
+HTTP/1.1 400
+
+{"resultCode":"400-1","msg":"제목은 공백이 아닌 1~200자여야 합니다.","data":null}
+
+HTTP/1.1 404
+
+{"resultCode":"404-1","msg":"할 일을 찾을 수 없습니다.","data":null}
 ```
